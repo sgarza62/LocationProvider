@@ -10,11 +10,10 @@
     tools:context="com.example.locationprovider.MainActivity"
     android:id="@+id/root_view">
 
-    <TextView
-        android:id="@+id/textview1"
+    <Button
+        android:id="@+id/permissionsButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text=""
-        android:onClick="recheckPermissions"
-        android:clickable="true"/>
+        android:text="permissions?"
+        android:onClick="recheckPermissions"/>
 </RelativeLayout>

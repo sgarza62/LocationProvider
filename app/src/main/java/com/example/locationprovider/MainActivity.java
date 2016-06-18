@@ -1,7 +1,7 @@
 package com.example.locationprovider;
 
-import android.*;
 import android.Manifest;
+import android.content.Context;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.location.Location;
@@ -14,7 +14,6 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
-import android.widget.TextView;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -30,19 +29,22 @@ public class MainActivity extends AppCompatActivity implements
     public static final String TAG = MainActivity.class.getSimpleName();
     private GoogleApiClient mGoogleApiClient;
     private LocationRequest mLocationRequest;
-    private TextView mTextView;
-    private View mParentLayout;
-    public static final int COARSE_LOC_REQUEST = 1;
-    public static final int FINE_LOC_REQUEST = 2;
     private final static int CONNECTION_FAILURE_RESOLUTION_REQUEST = 9000;
+    private View mParentLayout;
+    public static final int PERMISSION_ALL = 42;
+    private final String[] PERMISSIONS = {
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.CAMERA
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mTextView = (TextView) findViewById(R.id.textview1);
         mParentLayout = findViewById(R.id.root_view);
+
+        askForMissingPermissions();
 
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(this)
@@ -54,8 +56,6 @@ public class MainActivity extends AppCompatActivity implements
                 .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
                 .setInterval(10 * 1000)        // 10 seconds, in milliseconds
                 .setFastestInterval(1000);     // 1 second, in milliseconds
-
-        checkPermissions();
     }
 
     @Override
@@ -73,136 +73,91 @@ public class MainActivity extends AppCompatActivity implements
         }
     }
 
-    private void requestFineLocationPermission() {
-        if (ActivityCompat.shouldShowRequestPermissionRationale(
-                this, android.Manifest.permission.ACCESS_FINE_LOCATION)) {
-            Snackbar.make(mParentLayout, "Fine Location Access is Required", Snackbar.LENGTH_INDEFINITE)
-                    .setAction("OK", new View.OnClickListener() {
-                        @Override
-                        public void onClick(View view) {
-                            ActivityCompat.requestPermissions(
-                                    MainActivity.this,
-                                    new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION},
-                                    FINE_LOC_REQUEST
-                            );
-                        }
-                    })
-                    .show();
-        } else {
-            // Permission has not been granted yet. Request it directly.
-            ActivityCompat.requestPermissions(
-                    MainActivity.this,
-                    new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION},
-                    FINE_LOC_REQUEST
-            );
+    public static boolean hasAllPermissions(Context context, String... permissions) {
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && context != null && permissions != null) {
+            for (String permission : permissions) {
+                if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
+                    Log.i(TAG, permission + " permission is missing.");
+                    return false;
+                }
+            }
         }
-
-        return;
+        return true;
     }
 
-    private void requestPermission(final String permission, final int requestCode) {
-        if (ActivityCompat.shouldShowRequestPermissionRationale(this, permission)) {
-            Snackbar.make(mParentLayout, permission + " Access is Required", Snackbar.LENGTH_INDEFINITE)
-                    .setAction("OK", new View.OnClickListener() {
-                        @Override
-                        public void onClick(View view) {
-                            ActivityCompat.requestPermissions(
-                                    MainActivity.this,
-                                    new String[]{permission},
-                                    requestCode
-                            );
-                        }
-                    })
-                    .show();
-        } else {
-            // Permission has not been granted yet. Request it directly.
-            ActivityCompat.requestPermissions(
-                    MainActivity.this,
-                    new String[]{permission},
-                    requestCode
-            );
-        }
-
-        return;
-    }
-
-    private void checkPermissions() {
+    private void askForMissingPermissions() {
         // Marshmallow+ requires we ask for unmet permissions one-by-one at runtime
-        if (Build.VERSION.SDK_INT >= 23) {
-            boolean hasFineLocPermission =
-                    ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                            == PackageManager.PERMISSION_GRANTED;
-
-            boolean hasCoarseLocPermission =
-                    ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
-                            == PackageManager.PERMISSION_GRANTED;
-
-            if (!hasFineLocPermission) {
-                Log.i(TAG, "Fine Location Permission Missing");
-                requestPermission(android.Manifest.permission.ACCESS_FINE_LOCATION, FINE_LOC_REQUEST);
-            }
-
-            if (!hasCoarseLocPermission) {
-                Log.i(TAG, "Coarse Location Permission Missing");
-                requestPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION, COARSE_LOC_REQUEST);
-            }
-        }
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !hasAllPermissions(this, PERMISSIONS)) {
+            ActivityCompat.requestPermissions(this, PERMISSIONS, PERMISSION_ALL);
+        } else Log.i(TAG, "All permissions are already granted!");
     }
 
-    /**
-     * Callback received when a permissions request has been completed.
-     */
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
 
-        if (requestCode == FINE_LOC_REQUEST) {
-            Log.i(TAG, "Received response for fine location permission request.");
-            if (grantResults.length != 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                mTextView.setText("FINE PERMISSION GRANTED");
-            } else {
-                mTextView.setText("FINE PERMISSION DENIED (CLICK HERE TO TRY AGAIN)");
+        boolean somethingWasDenied = false;
+
+        for (int i = 0; i < grantResults.length; i++) {
+
+            if (requestCode != PERMISSION_ALL) {
+                super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+                return;
             }
-        } else if (requestCode == COARSE_LOC_REQUEST) {
-            Log.i(TAG, "Received response for coarse location permission request.");
-            if (grantResults.length != 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                mTextView.setText("COARSE PERMISSION GRANTED");
-            } else {
-                mTextView.setText("COARSE PERMISSION DENIED (CLICK HERE TO TRY AGAIN)");
-            }
-        } else {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+            if (grantResults[i] == PackageManager.PERMISSION_DENIED) {
+                Log.i(TAG, permissions[i] + " permission was denied.");
+                somethingWasDenied = true;
+            } else Log.i(TAG, permissions[i] + " permission was granted.");
+
         }
 
-    }
+        if (somethingWasDenied) {
 
-    /**
-     * TODO: 8===D  ({})
-     * Coarse + Fine not tested yet – probably don't work together.
-     * Remove all the mTextView shit.
-     * Permission results should be Log.i'd.
-     * There should be a single button that, when pressed, checks permissions and
-     *requests missing permissions one-by-one from the user.
-     */
+            boolean shouldShowRationale = false;
+            for (String perm : PERMISSIONS) {
+                if (ActivityCompat.shouldShowRequestPermissionRationale(this, perm)) {
+                    shouldShowRationale = true;
+                }
+            }
+
+            if (shouldShowRationale) {
+                // Explain why, then request permission directly
+                String msg = "This app uses location and camera. Grant permissions?";
+                Snackbar.make(mParentLayout, msg, Snackbar.LENGTH_INDEFINITE)
+                        .setAction("OK", new View.OnClickListener() {
+                            @Override
+                            public void onClick(View view) {
+                                ActivityCompat.requestPermissions(
+                                        MainActivity.this,
+                                        PERMISSIONS,
+                                        PERMISSION_ALL);
+                            }
+                        })
+                        .show();
+            } else {
+                Log.d(TAG, "Denied and should not show rationale (Do Not Ask Again was checked)...what to do?");
+                /*
+                // Request permission directly
+                ActivityCompat.requestPermissions(
+                        MainActivity.this,
+                        PERMISSIONS,
+                        PERMISSION_ALL);
+                */
+            }
+
+        }
+    }
 
     public void recheckPermissions(View view) {
-        mTextView = (TextView) view;
-        mTextView.setText("");
-        checkPermissions();
+        askForMissingPermissions();
     }
 
     @Override
     public void onConnected(@Nullable Bundle bundle) {
         Log.i(TAG, "Location services connected.");
 
-        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
+
+        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
 
@@ -210,8 +165,7 @@ public class MainActivity extends AppCompatActivity implements
         if (location == null) {
             Log.i(TAG, "Location was null. Requesting new updates.");
             LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
-        }
-        else {
+        } else {
             Log.i(TAG, "Location was not null! Using location.");
             handleNewLocation(location);
         }
@@ -223,7 +177,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
-    public void onConnectionFailed(ConnectionResult connectionResult) {
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
         if (connectionResult.hasResolution()) {
             try {
                 // Start an Activity that tries to resolve the error
